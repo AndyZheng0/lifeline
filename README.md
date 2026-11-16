@@ -11,7 +11,19 @@ An editable, data-grounded dashboard shell based on the supplied **Customer_Chur
 
 The dataset is already included under `data/customer_churn.xlsx`.
 
-## Integrate your models later
+## Connect the account assistant
+
+Run Streamlit on a machine that can reach the Unsloth Decision API and the TrueNAS Open WebUI server over Tailscale. The browser talks to Streamlit, so the machine running Python needs this access even if the browser can already open TrueNAS.
+
+1. Open `.env` beside `app.py`. If your checkout has only `.env.example`, copy it to `.env` first. Fill in the two base URLs and API keys. Include the port if applicable. Use the base address without `/v1` or `/api/chat/completions`. Git ignores `.env`.
+2. Enter the exact model IDs. If you only know the keys and URLs, open **Model + Settings**. The model-list buttons show which IDs each key can access. Use the Unsloth Decision Model trained on the main workbook and a regular Open WebUI chat model.
+3. Open **Accounts**, select a customer in **Account assistant**, and ask “Will this account churn?” Then try “Why did it give that score?” or “What if they had two fewer complaints?”
+
+Unsloth returns the prediction and score for the selected account. Open WebUI interprets chat requests and helps explain comparisons. A what-if changes one input and shows the difference between two scores in percentage points. These tests describe how the model responds to an input change. Both services receive only the relevant account fields and neither receives `CustomerID` or the recorded `Churn` label from the workbook. Open WebUI also receives the questions typed in the account chat.
+
+The app reads `.env` on each Streamlit rerun. Server environment variables take precedence. Existing Streamlit secrets still work as a fallback.
+
+## Optional integrations
 
 Edit **`integrations.py`** (and not the main dashboard layout):
 
@@ -19,7 +31,7 @@ Edit **`integrations.py`** (and not the main dashboard layout):
 - `get_ai_recommendations(segment_name, segment_stats)` → `None`, or list of `{'title': ..., 'reason': ...}` actions.
 - `save_action(customer_id, action, status)` → `False` or your database write. *Currently the carousel saves a segment-level action and passes the segment name as the first argument; adapt this if you implement per-customer outreach.*
 
-When predictions are integrated, the Accounts table gains a prediction column and is ordered by it. A future iteration can replace the historical segment metrics with actual model-scored estimates and individual SHAP explanations.
+If you add batch predictions, the Accounts table gains a prediction column and is ordered by it. The account chat itself makes on-demand requests for the selected record.
 
 ## What is and is not real
 

@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from integrations import get_predictions, get_ai_recommendations, save_action
+from account_chat import show_account_chat, show_model_settings
 
 st.set_page_config(page_title="LifeLine | Action Center", page_icon="💜", layout="wide", initial_sidebar_state="expanded")
 
@@ -269,9 +270,10 @@ def main():
         st.title("Accounts")
         st.caption("Individual B2C customer records from the uploaded dataset.")
         show_accounts(df,preds,key="all")
+        show_account_chat(df)
     else:
         st.title("Model + Settings")
-        st.markdown('<div class="ll-banner"><b>ML model: '+('Connected' if preds is not None else 'Not connected')+'</b><br>Implement <code>get_predictions(customers)</code> in <code>integrations.py</code>. Return a DataFrame with <code>CustomerID</code> and <code>churn_probability</code>.</div>',unsafe_allow_html=True)
+        show_model_settings()
         st.write(" ")
         st.markdown('<div class="ll-banner"><b>AI recommendations: Placeholder</b><br>Implement <code>get_ai_recommendations(segment_name, segment_stats)</code> in <code>integrations.py</code>. Until then, the carousel shows labeled rule-based examples.</div>',unsafe_allow_html=True)
         st.write(" ")
