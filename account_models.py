@@ -1,6 +1,7 @@
 """API clients and input mapping for LifeLine's account assistant."""
 import json
 import math
+import re
 from dataclasses import dataclass
 from datetime import date
 from urllib.error import HTTPError, URLError
@@ -56,6 +57,8 @@ class ModelService:
     url: str = ""
     token: str = ""
     model: str = ""
+    chat_path: str = "/api/chat/completions"
+    models_path: str = "/api/models"
 
     def ready(self):
         return bool(self.url and self.token and self.model)
@@ -108,8 +111,8 @@ class ModelService:
         except (KeyError, TypeError, ValueError):
             raise ServiceError("Unsloth did not return a usable churn label and score.") from None
 
-    def model_ids(self, path):
-        output = self.request(path)
+    def model_ids(self):
+        output = self.request(self.models_path)
         try:
             return [model["id"] for model in output["data"] if isinstance(model["id"], str)]
         except (KeyError, TypeError):
@@ -117,8 +120,8 @@ class ModelService:
 
     def chat(self, prompt, context):
         if not self.model:
-            raise ServiceError("Set the Open WebUI chat model ID in Model + Settings.")
-        output = self.request("/api/chat/completions", {
+            raise ServiceError(f"Set the {self.name} chat model ID in Model + Settings.")
+        payload = {
             "model": self.model,
             "stream": False,
             "temperature": 0,
@@ -126,14 +129,17 @@ class ModelService:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(context)},
             ],
-        })
+        }
+        if self.chat_path == "/v1/chat/completions":
+            payload.update(max_tokens=192, chat_template_kwargs={"enable_thinking": False})
+        output = self.request(self.chat_path, payload)
         try:
             reply = output["choices"][0]["message"]["content"].strip()
             if not reply:
                 raise ValueError
             return reply
         except (KeyError, IndexError, TypeError, AttributeError, ValueError):
-            raise ServiceError("Open WebUI returned an empty or unrecognized chat reply.") from None
+            raise ServiceError(f"{self.name} returned an empty or unrecognized chat reply.") from None
 
 
 def number(value, whole=False):
@@ -186,6 +192,31 @@ def profile_for(row):
 
 
 def parse_action(text, profile, history, speaker):
+    question = text.strip().lower().rstrip(" ?!.")
+    if re.fullmatch(
+        r"(?:will|do you think) (?:this (?:customer|account)|the (?:customer|account)|they)(?: will)? churn(?: and why)?",
+        question,
+    ):
+        return ("explain" if question.endswith("and why") else "score"), None
+
+    # Keep explicit complaint comparisons usable even with a small chat model.
+    complaints = re.fullmatch(
+        r"(?:what if|suppose) (?:this (?:customer|account)|the (?:customer|account)|they)"
+        r" (?:had|has) (?:exactly )?"
+        r"(\d{1,8}|zero|one|two|three|four|five|six|seven|eight|nine|ten)"
+        r"(?: (fewer|less|more))? complaints?(?: instead of \d+)?",
+        question,
+    )
+    if complaints:
+        amount, direction = complaints.groups()
+        words = "zero one two three four five six seven eight nine ten".split()
+        value = int(amount) if amount.isdecimal() else words.index(amount)
+        if direction:
+            value = profile["total_complaints"] + (value if direction == "more" else -value)
+        if value < 0:
+            return "clarify", None
+        return "scenario", ("total_complaints", value)
+
     content = speaker.chat(
         "Route the latest question about a selected telecom account. Return only one JSON object. "
         'Use {"action":"score"} for direct prediction requests, {"action":"explain"} when asked why or for a prediction with an explanation, '

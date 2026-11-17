@@ -15,7 +15,7 @@ from account_models import ModelService, SCENARIO_FIELDS, ServiceError, parse_ac
 def services():
     local_env = dotenv_values(Path(__file__).with_name(".env"), interpolate=False)
 
-    def configured(group, name, prefix):
+    def configured(group, name, prefix, **paths):
         try:
             settings = st.secrets.get(group, {})
         except StreamlitSecretNotFoundError:
@@ -30,21 +30,28 @@ def services():
             url=value("url"),
             token=value("api_key"),
             model=value("model"),
+            **paths,
         )
 
-    return (
-        configured("decision", "Unsloth", "CHURN"),
-        configured("openwebui", "Open WebUI", "OPENWEBUI"),
-    )
+    decision = configured("decision", "Unsloth Decision", "CHURN", models_path="/v1/models")
+    provider = (os.getenv("CHAT_PROVIDER") or local_env.get("CHAT_PROVIDER") or "openwebui").strip().lower()
+    if provider == "unsloth":
+        speaker = configured(
+            "unsloth_chat", "Unsloth Chat", "UNSLOTH_CHAT",
+            chat_path="/v1/chat/completions", models_path="/v1/models",
+        )
+    else:
+        speaker = configured("openwebui", "Open WebUI", "OPENWEBUI")
+    return decision, speaker
 
 
 def show_model_settings():
     st.subheader("Account assistant")
-    for service, path in zip(services(), ("/v1/models", "/api/models")):
+    for service in services():
         st.write(f"**{service.name}** · {'Configured' if service.ready() else 'Setup needed'}")
         if st.button(f"List {service.name} model IDs", disabled=not (service.url and service.token)):
             try:
-                ids = service.model_ids(path)
+                ids = service.model_ids()
                 if ids:
                     st.code("\n".join(ids), language=None)
                 else:
@@ -53,7 +60,7 @@ def show_model_settings():
                 st.error(str(exc))
     st.caption("Enter the API keys, base URLs and model IDs in the .env file beside app.py. "
                "The Streamlit server needs "
-               "network access to both services, including the TrueNAS Tailscale address.")
+               "network access to both model servers.")
 
 
 def label(result):
@@ -196,11 +203,15 @@ def show_account_chat(customers):
         return
     decision, speaker = services()
     if not decision.ready() or not speaker.ready():
-        st.info("Check Model + Settings to configure the Unsloth and Open WebUI connections.")
+        st.info("Check Model + Settings to configure the decision and chat connections.")
     threads = st.session_state.setdefault("account_chat_threads", {})
     thread = threads.get(account_id)
-    if thread is None or thread["profile"] != profile:
-        thread = threads[account_id] = {"profile": profile, "turns": [], "baseline": None}
+    decision_identity = (decision.url, decision.model)
+    if thread is None or thread["profile"] != profile or thread.get("decision_identity") != decision_identity:
+        thread = threads[account_id] = {
+            "profile": profile, "turns": [], "baseline": None,
+            "decision_identity": decision_identity,
+        }
     for index, turn in enumerate(thread["turns"]):
         show_turn(turn, latest=index == len(thread["turns"]) - 1)
     controls, reset = st.columns([3, 1])

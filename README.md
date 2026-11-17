@@ -13,13 +13,13 @@ The dataset is already included under `data/customer_churn.xlsx`.
 
 ## Connect the account assistant
 
-Run Streamlit on a machine that can reach the Unsloth Decision API and the TrueNAS Open WebUI server over Tailscale. The browser talks to Streamlit, so the machine running Python needs this access even if the browser can already open TrueNAS.
+Run Streamlit on a machine that can reach the Unsloth Decision API and your conversation server. For a private Tailscale address, the machine running Streamlit needs access through Tailscale.
 
 1. Open `.env` beside `app.py`. If your checkout has only `.env.example`, copy it to `.env` first. Fill in the two base URLs and API keys. Include the port if applicable. Use the base address without `/v1` or `/api/chat/completions`. Git ignores `.env`.
-2. Enter the exact model IDs. If you only know the keys and URLs, open **Model + Settings**. The model-list buttons show which IDs each key can access. Use the Unsloth Decision Model trained on the main workbook and a regular Open WebUI chat model.
+2. Enter the exact model IDs. If you only know the keys and URLs, open **Model + Settings**. The model-list buttons show which IDs each key can access. Use the Unsloth Decision Model trained on the main workbook. For conversation, set `CHAT_PROVIDER=unsloth` and fill in `UNSLOTH_CHAT_URL`, `UNSLOTH_CHAT_MODEL`, and `UNSLOTH_CHAT_API_KEY`. For Open WebUI, select `CHAT_PROVIDER=openwebui` and use the `OPENWEBUI_*` settings.
 3. Open **Accounts**, select a customer in **Account assistant**, and ask “Will this account churn?” Then try “Why did it give that score?” or “What if they had two fewer complaints?”
 
-Unsloth returns the prediction and score for the selected account. Open WebUI interprets chat requests and helps explain comparisons. A what-if changes one input and shows the difference between two scores in percentage points. These tests describe how the model responds to an input change. Both services receive only the relevant account fields and neither receives `CustomerID` or the recorded `Churn` label from the workbook. Open WebUI also receives the questions typed in the account chat.
+Unsloth returns the prediction and score for the selected account. The selected chat model interprets requests and helps explain comparisons. A what-if changes one input and shows the difference between two scores in percentage points. These tests describe how the model responds to an input change. Both services receive only the relevant account fields and neither receives `CustomerID` or the recorded `Churn` label from the workbook. The chat service also receives the questions typed in the account chat.
 
 The app reads `.env` on each Streamlit rerun. Server environment variables take precedence. Existing Streamlit secrets still work as a fallback.
 
